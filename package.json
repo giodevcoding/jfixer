@@ -1,0 +1,32 @@
+{
+  "name": "jhipster-fix",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist/jhipster-fix.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "clean": "rimraf ./dist",
+    "build": "npm run clean && npx tsc",
+    "start": "npm run build && node ./dist/jhipster-fix.js",
+    "install:win": "npm install -g .",
+    "install:linux": "sudo npm install -g .",
+    "install:mac": "sudo npm install -g ."
+  },
+  "bin": {
+    "jhipster-fix": "./dist/jhipster-fix.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "commander": "^11.0.0",
+    "glob": "^10.3.4",
+    "rimraf": "^5.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.6.0"
+  }
+}
