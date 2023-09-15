@@ -39,26 +39,78 @@ async function main() {
         .parse(process.argv);
     const projectFolder = program.args.length > 0 ? program.args[0] : process.cwd();
     const sourceFolder = projectFolder + "/src/";
-    uninstallPackages();
-    installNewPackages();
+    const packageJson = await getPackageJSON(projectFolder);
+    removePackages(packageJson);
+    installPackages(packageJson);
     const jsFilePaths = await getJSFilePaths(sourceFolder);
     updateJSFiles(jsFilePaths);
+    jfixerlog("FINISHED");
 }
-function uninstallPackages() {
-    const packagesToUninstall = ["availity-reactstrap-validation"];
-    packagesToUninstall.forEach((pkg) => {
-        jfixerlog("Uninstalling package: ", pkg);
-    });
-    (0, node_child_process_1.execSync)(`npm uninstall ${packagesToUninstall.join(" ")} --legacy-peer-deps`, { stdio: "inherit" });
+async function getPackageJSON(projectFolder) {
+    try {
+        const rawData = await fs.readFile(`${projectFolder}/package.json`, "utf8");
+        const parsedData = JSON.parse(rawData);
+        return parsedData;
+    }
+    catch (err) {
+        console.error(err);
+        return {};
+    }
 }
-function installNewPackages() {
-    const packagesToInstall = ["@availity/form@^1.7.4"];
-    packagesToInstall.forEach((pkg) => {
-        jfixerlog("Installing package: ", pkg);
-    });
-    (0, node_child_process_1.execSync)(`npm install ${packagesToInstall.join(" ")} --legacy-peer-deps`, {
-        stdio: "inherit",
-    });
+function removePackages(packageJson) {
+    const allOldPackages = [
+        { name: "availity-reactstrap-validation" },
+    ];
+    const packagesToRemove = packageJson?.dependencies == null ? allOldPackages : [];
+    if (packageJson.dependencies != null) {
+        const dependencyNames = Object.keys(packageJson.dependencies);
+        allOldPackages.forEach((pkg) => {
+            console.log(dependencyNames);
+            if (dependencyNames.includes(pkg.name)) {
+                packagesToRemove.push(pkg);
+            }
+        });
+    }
+    if (packagesToRemove.length > 0) {
+        const packageList = packagesToRemove.reduce((allNames, pkg) => {
+            return allNames.concat(pkg.name, " ");
+        }, "");
+        console.log("\n");
+        jfixerlog("Removing packages:", packageList);
+        console.log("\n");
+        (0, node_child_process_1.execSync)(`npm uninstall ${packageList} --legacy-peer-deps`, {
+            stdio: "inherit",
+        });
+    }
+}
+function installPackages(packageJson) {
+    const allNewPackages = [
+        { name: "@availity/form", version: "1.7.4" },
+    ];
+    const packagesToInstall = packageJson?.dependencies == null ? allNewPackages : [];
+    if (packageJson.dependencies != null) {
+        const dependencyNames = Object.keys(packageJson.dependencies);
+        allNewPackages.forEach((pkg) => {
+            if (!dependencyNames.includes(pkg.name)) {
+                packagesToInstall.push(pkg);
+            }
+            else if (pkg.version != null &&
+                !packageJson.dependencies?.[pkg.name].includes(pkg.version)) {
+                packagesToInstall.push(pkg);
+            }
+        });
+    }
+    if (packagesToInstall.length > 0) {
+        const packageList = packagesToInstall.reduce((allNames, pkg) => {
+            return allNames.concat(pkg.name, " ");
+        }, "");
+        console.log("\n");
+        jfixerlog("Installing packages:", packageList);
+        console.log("\n");
+        (0, node_child_process_1.execSync)(`npm install ${packageList} --legacy-peer-deps`, {
+            stdio: "inherit",
+        });
+    }
 }
 /**
  * Get all file paths that need to be changed
@@ -112,7 +164,8 @@ function updateAvailityPackages(path, lines) {
         const initialReplacments = getInitialAvailityReplacements(data.toString());
         const withInitialValues = insertAvailityInitialValues(initialReplacments);
         const withUpdatedSubmit = updateAvailitySubmit(withInitialValues);
-        fs.writeFile(path, withUpdatedSubmit).then(() => {
+        const withFixedFormGroups = fixAvailityFormGroups(withUpdatedSubmit);
+        fs.writeFile(path, withFixedFormGroups).then(() => {
             jfixerlog("Updated availity-reactstrap-validation to @availity/form in:", path);
         });
     })
@@ -152,6 +205,16 @@ function updateAvailitySubmit(data) {
     }
     return newData;
 }
+function fixAvailityFormGroups(data) {
+    let newData = data;
+    const getIdRegex = /(?<=<FormGroup[\s\S]*(?:Input|Field)[^=Label]*id=")[^"]*(?="[\s\S]*<\/FormGroup)/gm;
+    const formGroupRegex = /<FormGroup(?!.*for)(?=[\s\S]*[Input|Field][\s\S]*<\/FormGroup>)/m;
+    const ids = data.match(getIdRegex);
+    ids?.forEach((id) => {
+        newData = newData.replace(formGroupRegex, `<FormGroup for="${id}" `);
+    });
+    return newData;
+}
 function getAvailityFieldNames(data) {
     const namesRegex = /(?<=name=")(?<=").*(?=")/g;
     let resultName = null;
@@ -172,7 +235,7 @@ function getInitialValueObjectString(fieldNames) {
     return initialValueObjectString;
 }
 function jfixerlog(...input) {
-    console.log("[JFIXER]:", ...input);
+    console.log("\x1b[36m", "[JFIXER]:", "\x1b[0m", ...input);
 }
 main();
 //# sourceMappingURL=jfixer.js.map

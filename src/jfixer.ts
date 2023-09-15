@@ -1,10 +1,10 @@
 #! /usr/bin/env node
 import * as fs from "node:fs/promises";
-import * as readline from "node:readline";
-import { glob } from "glob";
 import { Command } from "commander";
-import { createReadStream } from "node:fs";
 import { execSync } from "node:child_process";
+import type { NPMPackage, PackageJSON } from "./types";
+import { getFileLines, getJSFilePaths, jfixerlog } from "./util";
+import { updateAvailityPackages } from "./availity";
 
 /** The main function that is executed at the end of the file */
 async function main() {
@@ -20,194 +20,105 @@ async function main() {
   const projectFolder =
     program.args.length > 0 ? program.args[0] : process.cwd();
   const sourceFolder = projectFolder + "/src/";
+  const packageJson = await getPackageJSON(projectFolder);
 
-  uninstallPackages();
-  installNewPackages();
+  removePackages(packageJson);
+  installPackages(packageJson);
 
   const jsFilePaths = await getJSFilePaths(sourceFolder);
   updateJSFiles(jsFilePaths);
+
+  jfixerlog("FINISHED");
 }
 
-function uninstallPackages() {
-  const packagesToUninstall = ["availity-reactstrap-validation"];
-
-  packagesToUninstall.forEach((pkg) => {
-    jfixerlog("Uninstalling package: ", pkg);
-  });
-
-  execSync(
-    `npm uninstall ${packagesToUninstall.join(" ")} --legacy-peer-deps`,
-    { stdio: "inherit" },
-  );
+async function getPackageJSON(projectFolder: string): Promise<PackageJSON> {
+  try {
+    const rawData = await fs.readFile(`${projectFolder}/package.json`, "utf8");
+    const parsedData = JSON.parse(rawData);
+    return parsedData as PackageJSON;
+  } catch (err) {
+    console.error(err);
+    return {};
+  }
 }
 
-function installNewPackages() {
-  const packagesToInstall = ["@availity/form@^1.7.4"];
+function removePackages(packageJson: PackageJSON) {
+  const allOldPackages: NPMPackage[] = [
+    { name: "availity-reactstrap-validation" },
+  ];
 
-  packagesToInstall.forEach((pkg) => {
-    jfixerlog("Installing package: ", pkg);
-  });
+  const packagesToRemove: NPMPackage[] =
+    packageJson?.dependencies == null ? allOldPackages : [];
 
-  execSync(`npm install ${packagesToInstall.join(" ")} --legacy-peer-deps`, {
-    stdio: "inherit",
-  });
+  if (packageJson.dependencies != null) {
+    const dependencyNames = Object.keys(packageJson.dependencies);
+    allOldPackages.forEach((pkg) => {
+      if (dependencyNames.includes(pkg.name)) {
+        packagesToRemove.push(pkg);
+      }
+    });
+  }
+
+  if (packagesToRemove.length > 0) {
+    const packageList = packagesToRemove.reduce((allNames, pkg) => {
+      return allNames.concat(pkg.name, " ");
+    }, "");
+
+    console.log("\n");
+    jfixerlog("Removing packages:", packageList);
+    console.log("\n");
+
+    execSync(`npm uninstall ${packageList} --legacy-peer-deps`, {
+      stdio: "inherit",
+    });
+  }
 }
 
-/**
- * Get all file paths that need to be changed
- * */
-async function getJSFilePaths(srcFolder: string) {
-  const files = await glob(srcFolder + "/**/*.{js,jsx,ts,tsx}");
-  return files;
+function installPackages(packageJson: PackageJSON) {
+  const allNewPackages: NPMPackage[] = [
+    { name: "@availity/form", version: "1.7.4" },
+  ];
+
+  const packagesToInstall: NPMPackage[] =
+    packageJson?.dependencies == null ? allNewPackages : [];
+
+  if (packageJson.dependencies != null) {
+    const dependencyNames = Object.keys(packageJson.dependencies);
+    allNewPackages.forEach((pkg) => {
+      if (!dependencyNames.includes(pkg.name)) {
+        packagesToInstall.push(pkg);
+      } else if (
+        pkg.version != null &&
+        !packageJson.dependencies?.[pkg.name].includes(pkg.version)
+      ) {
+        packagesToInstall.push(pkg);
+      }
+    });
+  }
+
+  if (packagesToInstall.length > 0) {
+    const packageList = packagesToInstall.reduce((allNames, pkg) => {
+      return allNames.concat(pkg.name, " ");
+    }, "");
+
+    console.log("\n");
+    jfixerlog("Installing packages:", packageList);
+    console.log("\n");
+
+    execSync(`npm install ${packageList} --legacy-peer-deps`, {
+      stdio: "inherit",
+    });
+  }
 }
 
 async function updateJSFiles(filePaths: string[]) {
   for (const path of filePaths) {
     try {
       const lines = await getFileLines(path);
-
       updateAvailityPackages(path, lines);
     } catch (err) {
       console.error(err);
     }
   }
 }
-
-async function getFileLines(path: string) {
-  const linesInterface = readline.createInterface({
-    input: createReadStream(path),
-    crlfDelay: Infinity,
-  });
-  const lines: string[] = [];
-
-  for await (const line of linesInterface) {
-    lines.push(line);
-  }
-
-  return lines as readonly string[];
-}
-
-/**
- * Updates availity-reactstrap-validation to @availity/form and the imported components.
- *
- * @throws NodeJS.ErrnoException
- */
-function updateAvailityPackages(
-  path: string,
-  lines: readonly string[],
-): void | never {
-  const maxLines = Math.min(lines.length, 20);
-
-  let availityLineIndex = -1;
-
-  for (let i = 0; i < maxLines; i++) {
-    const line = lines[i];
-    if (line.includes("availity-reactstrap-validation")) {
-      availityLineIndex = i;
-      break;
-    }
-  }
-
-  if (availityLineIndex === -1) {
-    return;
-  }
-
-  fs.readFile(path)
-    .then((data) => {
-      const initialReplacments = getInitialAvailityReplacements(
-        data.toString(),
-      );
-      const withInitialValues = insertAvailityInitialValues(initialReplacments);
-      const withUpdatedSubmit = updateAvailitySubmit(withInitialValues);
-
-      fs.writeFile(path, withUpdatedSubmit).then(() => {
-        jfixerlog(
-          "Updated availity-reactstrap-validation to @availity/form in:",
-          path,
-        );
-      });
-    })
-    .catch((err: NodeJS.ErrnoException) => {
-      throw err;
-    });
-}
-
-function getInitialAvailityReplacements(data: string): string {
-  return (
-    data
-      .replaceAll(/availity-reactstrap-validation/g, "@availity/form")
-      .replaceAll(/AvFeedback/g, "Feedback")
-      //.replaceAll(/AvFeedback,\s*(?=.*availity)/g, "")
-      //   .replaceAll(/<AvFeedback/g, '<span className="invalid-feedback"')
-      //  .replaceAll(/<\/AvFeedback.*>/g, "</span>")
-      .replaceAll(/AvForm/g, "Form")
-      .replaceAll(/AvGroup/g, "FormGroup")
-      .replaceAll(/AvInput/g, "Input")
-      .replaceAll(/AvField/g, "Field")
-  );
-}
-
-function insertAvailityInitialValues(data: string): string {
-  const names = getAvailityFieldNames(data);
-  const initialValueObjectString = getInitialValueObjectString(names);
-
-  const newData = data
-    .replace(/export/, initialValueObjectString)
-    .replaceAll(/<Form\s(?!.*model)/g, "<Form initialValues={initialValues} ")
-    .replaceAll(/(?<=model=\{\s?isNew\s?\?\s?){}(?=\s?:)/g, "initialValues")
-    .replaceAll(/(?<=<Form.*)model/g, "initialValues");
-
-  return newData;
-}
-
-function updateAvailitySubmit(data: string): string {
-  const newData = data.replace(
-    /\(event,\s?errors,\s?values\)\s?=>\s?\{/,
-    "async (values, helpers) => {\n    const errors = await helpers.validateForm(values);",
-  );
-
-  const destructuredValuesRegex = /(?<=\(event,\s?errors,\s?){.*}/;
-  const executedDestructuredRegex = destructuredValuesRegex.exec(newData);
-
-  if (executedDestructuredRegex !== null) {
-    const destructuredValuesString = executedDestructuredRegex[0];
-    return newData.replace(
-      /\(event,\s?errors,\s?\{.*\}\)\s?=>\s?\{/,
-      `async (values, helpers) => {\n    const ${destructuredValuesString} = values;\n    const errors = await helpers.validateForm(values);`,
-    );
-  }
-
-  return newData;
-}
-
-function getAvailityFieldNames(data: string): string[] {
-  const namesRegex = /(?<=name=")(?<=").*(?=")/g;
-  let resultName: RegExpExecArray | null = null;
-
-  const names = [];
-
-  while ((resultName = namesRegex.exec(data))) {
-    if (resultName?.[0] != null) {
-      names.push(resultName[0]);
-    }
-  }
-  return names;
-}
-
-function getInitialValueObjectString(fieldNames: string[]): string {
-  let initialValueObjectString = "\nconst initialValues = {";
-  fieldNames.forEach((name) => {
-    initialValueObjectString = initialValueObjectString.concat(
-      `\n  ${name}: null,`,
-    );
-  });
-  initialValueObjectString = initialValueObjectString.concat("\n}\n\nexport");
-
-  return initialValueObjectString;
-}
-
-function jfixerlog (...input: any) {
-  console.log("[JFIXER]:", ...input)
-}
-
 main();

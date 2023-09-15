@@ -108,5 +108,8 @@
   },
   "files": [
       "./src/jfixer.ts"
+  ],
+  "include": [
+      "./src/**/*"
   ]
 }
