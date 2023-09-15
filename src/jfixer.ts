@@ -65,7 +65,7 @@ function removePackages(packageJson: PackageJSON) {
     }, "");
 
     console.log("\n");
-    jfixerlog("Removing packages:", packageList);
+    jfixerlog("Removing packages:", packageList.split(" ").join(", "));
     console.log("\n");
 
     execSync(`npm uninstall ${packageList} --legacy-peer-deps`, {
@@ -103,7 +103,7 @@ function installPackages(packageJson: PackageJSON) {
     }, "");
 
     console.log("\n");
-    jfixerlog("Installing packages:", packageList);
+    jfixerlog("Installing packages:", packageList.split(" ").join(", "));
     console.log("\n");
 
     execSync(`npm install ${packageList} --legacy-peer-deps`, {
