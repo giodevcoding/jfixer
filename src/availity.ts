@@ -51,10 +51,9 @@ function getInitialAvailityReplacements(data: string): string {
   return (
     data
       .replaceAll(/availity-reactstrap-validation/g, "@availity/form")
-      .replaceAll(/AvFeedback/g, "Feedback")
-      //.replaceAll(/AvFeedback,\s*(?=.*availity)/g, "")
-      //   .replaceAll(/<AvFeedback/g, '<span className="invalid-feedback"')
-      //  .replaceAll(/<\/AvFeedback.*>/g, "</span>")
+      .replaceAll(/AvFeedback,\s*(?=.*availity)/g, "")
+      .replaceAll(/<AvFeedback/g, '<span className="invalid-feedback"')
+      .replaceAll(/<\/AvFeedback.*>/g, "</span>")
       .replaceAll(/AvForm/g, "Form")
       .replaceAll(/AvGroup/g, "FormGroup")
       .replaceAll(/AvInput/g, "Input")
