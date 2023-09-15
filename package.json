@@ -19,7 +19,7 @@
     "type": "git",
     "url": ""
   },
-  "author": "",
+  "author": "Giovanni Panzetta",
   "license": "ISC",
   "dependencies": {
     "commander": "^11.0.0",
