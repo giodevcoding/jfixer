@@ -4,6 +4,7 @@ import * as readline from "node:readline";
 import { glob } from "glob";
 import { Command } from "commander";
 import { createReadStream } from "node:fs";
+import { execSync } from "node:child_process";
 
 /** The main function that is executed at the end of the file */
 async function main() {
@@ -16,11 +17,40 @@ async function main() {
     )
     .parse(process.argv);
 
-  const projectFolder = program.args.length > 0 ? program.args[0] : process.cwd()
+  const projectFolder =
+    program.args.length > 0 ? program.args[0] : process.cwd();
   const sourceFolder = projectFolder + "/src/";
+
+  uninstallPackages();
+  installNewPackages();
 
   const jsFilePaths = await getJSFilePaths(sourceFolder);
   updateJSFiles(jsFilePaths);
+}
+
+function uninstallPackages() {
+  const packagesToUninstall = ["availity-reactstrap-validation"];
+
+  packagesToUninstall.forEach((pkg) => {
+    jfixerlog("Uninstalling package: ", pkg);
+  });
+
+  execSync(
+    `npm uninstall ${packagesToUninstall.join(" ")} --legacy-peer-deps`,
+    { stdio: "inherit" },
+  );
+}
+
+function installNewPackages() {
+  const packagesToInstall = ["@availity/form@^1.7.4"];
+
+  packagesToInstall.forEach((pkg) => {
+    jfixerlog("Installing package: ", pkg);
+  });
+
+  execSync(`npm install ${packagesToInstall.join(" ")} --legacy-peer-deps`, {
+    stdio: "inherit",
+  });
 }
 
 /**
@@ -84,12 +114,14 @@ function updateAvailityPackages(
 
   fs.readFile(path)
     .then((data) => {
-      const initialReplacments = getInitialAvailityReplacements(data.toString());
+      const initialReplacments = getInitialAvailityReplacements(
+        data.toString(),
+      );
       const withInitialValues = insertAvailityInitialValues(initialReplacments);
       const withUpdatedSubmit = updateAvailitySubmit(withInitialValues);
 
       fs.writeFile(path, withUpdatedSubmit).then(() => {
-        console.log(
+        jfixerlog(
           "Updated availity-reactstrap-validation to @availity/form in:",
           path,
         );
@@ -101,20 +133,21 @@ function updateAvailityPackages(
 }
 
 function getInitialAvailityReplacements(data: string): string {
-  return data
-    .replaceAll(/availity-reactstrap-validation/g, "@availity/form")
-    .replaceAll(/AvFeedback/g, "Feedback")
-    //.replaceAll(/AvFeedback,\s*(?=.*availity)/g, "")
- //   .replaceAll(/<AvFeedback/g, '<span className="invalid-feedback"')
-  //  .replaceAll(/<\/AvFeedback.*>/g, "</span>")
-    .replaceAll(/AvForm/g, "Form")
-    .replaceAll(/AvGroup/g, "FormGroup")
-    .replaceAll(/AvInput/g, "Input")
-    .replaceAll(/AvField/g, "Field")
+  return (
+    data
+      .replaceAll(/availity-reactstrap-validation/g, "@availity/form")
+      .replaceAll(/AvFeedback/g, "Feedback")
+      //.replaceAll(/AvFeedback,\s*(?=.*availity)/g, "")
+      //   .replaceAll(/<AvFeedback/g, '<span className="invalid-feedback"')
+      //  .replaceAll(/<\/AvFeedback.*>/g, "</span>")
+      .replaceAll(/AvForm/g, "Form")
+      .replaceAll(/AvGroup/g, "FormGroup")
+      .replaceAll(/AvInput/g, "Input")
+      .replaceAll(/AvField/g, "Field")
+  );
 }
 
 function insertAvailityInitialValues(data: string): string {
-
   const names = getAvailityFieldNames(data);
   const initialValueObjectString = getInitialValueObjectString(names);
 
@@ -122,22 +155,26 @@ function insertAvailityInitialValues(data: string): string {
     .replace(/export/, initialValueObjectString)
     .replaceAll(/<Form\s(?!.*model)/g, "<Form initialValues={initialValues} ")
     .replaceAll(/(?<=model=\{\s?isNew\s?\?\s?){}(?=\s?:)/g, "initialValues")
-    .replaceAll(/(?<=<Form.*)model/g, "initialValues")
+    .replaceAll(/(?<=<Form.*)model/g, "initialValues");
 
   return newData;
 }
 
 function updateAvailitySubmit(data: string): string {
-  const newData = data
-    .replace(/\(event,\s?errors,\s?values\)\s?=>\s?\{/, "async (values, helpers) => {\n    const errors = await helpers.validateForm(values);");
+  const newData = data.replace(
+    /\(event,\s?errors,\s?values\)\s?=>\s?\{/,
+    "async (values, helpers) => {\n    const errors = await helpers.validateForm(values);",
+  );
 
   const destructuredValuesRegex = /(?<=\(event,\s?errors,\s?){.*}/;
-  const executedDestructuredRegex = destructuredValuesRegex.exec(newData)
+  const executedDestructuredRegex = destructuredValuesRegex.exec(newData);
 
   if (executedDestructuredRegex !== null) {
     const destructuredValuesString = executedDestructuredRegex[0];
-    return newData
-      .replace(/\(event,\s?errors,\s?\{.*\}\)\s?=>\s?\{/, `async (values, helpers) => {\n    const ${destructuredValuesString} = values;\n    const errors = await helpers.validateForm(values);`);
+    return newData.replace(
+      /\(event,\s?errors,\s?\{.*\}\)\s?=>\s?\{/,
+      `async (values, helpers) => {\n    const ${destructuredValuesString} = values;\n    const errors = await helpers.validateForm(values);`,
+    );
   }
 
   return newData;
@@ -167,6 +204,10 @@ function getInitialValueObjectString(fieldNames: string[]): string {
   initialValueObjectString = initialValueObjectString.concat("\n}\n\nexport");
 
   return initialValueObjectString;
+}
+
+function jfixerlog (...input: any) {
+  console.log("[JFIXER]:", ...input)
 }
 
 main();

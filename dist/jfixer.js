@@ -29,6 +29,7 @@ const readline = __importStar(require("node:readline"));
 const glob_1 = require("glob");
 const commander_1 = require("commander");
 const node_fs_1 = require("node:fs");
+const node_child_process_1 = require("node:child_process");
 /** The main function that is executed at the end of the file */
 async function main() {
     const program = new commander_1.Command();
@@ -36,9 +37,28 @@ async function main() {
         .version("1.0.0")
         .description("A tool for fixing JHipster generated files with more up-to-date packages")
         .parse(process.argv);
-    const sourceFolder = program.args.length > 0 ? program.args[0] : process.cwd() + "/src/";
+    const projectFolder = program.args.length > 0 ? program.args[0] : process.cwd();
+    const sourceFolder = projectFolder + "/src/";
+    uninstallPackages();
+    installNewPackages();
     const jsFilePaths = await getJSFilePaths(sourceFolder);
     updateJSFiles(jsFilePaths);
+}
+function uninstallPackages() {
+    const packagesToUninstall = ["availity-reactstrap-validation"];
+    packagesToUninstall.forEach((pkg) => {
+        jfixerlog("Uninstalling package: ", pkg);
+    });
+    (0, node_child_process_1.execSync)(`npm uninstall ${packagesToUninstall.join(" ")} --legacy-peer-deps`, { stdio: "inherit" });
+}
+function installNewPackages() {
+    const packagesToInstall = ["@availity/form@^1.7.4"];
+    packagesToInstall.forEach((pkg) => {
+        jfixerlog("Installing package: ", pkg);
+    });
+    (0, node_child_process_1.execSync)(`npm install ${packagesToInstall.join(" ")} --legacy-peer-deps`, {
+        stdio: "inherit",
+    });
 }
 /**
  * Get all file paths that need to be changed
@@ -93,7 +113,7 @@ function updateAvailityPackages(path, lines) {
         const withInitialValues = insertAvailityInitialValues(initialReplacments);
         const withUpdatedSubmit = updateAvailitySubmit(withInitialValues);
         fs.writeFile(path, withUpdatedSubmit).then(() => {
-            console.log("Updated availity-reactstrap-validation to @availity/form in:", path);
+            jfixerlog("Updated availity-reactstrap-validation to @availity/form in:", path);
         });
     })
         .catch((err) => {
@@ -101,7 +121,7 @@ function updateAvailityPackages(path, lines) {
     });
 }
 function getInitialAvailityReplacements(data) {
-    return data
+    return (data
         .replaceAll(/availity-reactstrap-validation/g, "@availity/form")
         .replaceAll(/AvFeedback/g, "Feedback")
         //.replaceAll(/AvFeedback,\s*(?=.*availity)/g, "")
@@ -110,7 +130,7 @@ function getInitialAvailityReplacements(data) {
         .replaceAll(/AvForm/g, "Form")
         .replaceAll(/AvGroup/g, "FormGroup")
         .replaceAll(/AvInput/g, "Input")
-        .replaceAll(/AvField/g, "Field");
+        .replaceAll(/AvField/g, "Field"));
 }
 function insertAvailityInitialValues(data) {
     const names = getAvailityFieldNames(data);
@@ -123,14 +143,12 @@ function insertAvailityInitialValues(data) {
     return newData;
 }
 function updateAvailitySubmit(data) {
-    const newData = data
-        .replace(/\(event,\s?errors,\s?values\)\s?=>\s?\{/, "async (values, helpers) => {\n    const errors = await helpers.validateForm(values);");
+    const newData = data.replace(/\(event,\s?errors,\s?values\)\s?=>\s?\{/, "async (values, helpers) => {\n    const errors = await helpers.validateForm(values);");
     const destructuredValuesRegex = /(?<=\(event,\s?errors,\s?){.*}/;
     const executedDestructuredRegex = destructuredValuesRegex.exec(newData);
     if (executedDestructuredRegex !== null) {
         const destructuredValuesString = executedDestructuredRegex[0];
-        return newData
-            .replace(/\(event,\s?errors,\s?\{.*\}\)\s?=>\s?\{/, `async (values, helpers) => {\n    const ${destructuredValuesString} = values;\n    const errors = await helpers.validateForm(values);`);
+        return newData.replace(/\(event,\s?errors,\s?\{.*\}\)\s?=>\s?\{/, `async (values, helpers) => {\n    const ${destructuredValuesString} = values;\n    const errors = await helpers.validateForm(values);`);
     }
     return newData;
 }
@@ -153,5 +171,8 @@ function getInitialValueObjectString(fieldNames) {
     initialValueObjectString = initialValueObjectString.concat("\n}\n\nexport");
     return initialValueObjectString;
 }
+function jfixerlog(...input) {
+    console.log("[JFIXER]:", ...input);
+}
 main();
-//# sourceMappingURL=jhipster-fix.js.map
+//# sourceMappingURL=jfixer.js.map

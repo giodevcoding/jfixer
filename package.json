@@ -1,19 +1,19 @@
 {
-  "name": "jhipster-fix",
+  "name": "jfixer",
   "version": "1.0.0",
   "description": "",
-  "main": "dist/jhipster-fix.js",
+  "main": "dist/jfixer.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "clean": "rimraf ./dist",
     "build": "npm run clean && npx tsc --project ./tsconfig.json",
-    "start": "npm run build && node ./dist/jhipster-fix.js",
-    "install:win": "npm uninstall -g jhipster-fix && npm install -g .",
-    "install:linux": "sudo npm uninstall -g jhipster-fix && sudo npm install -g .",
-    "install:mac": "sudo npm uninstall -g jhipster-fix && sudo npm install -g ."
+    "start": "npm run build && node ./dist/jfixer.js",
+    "install:win": "npm uninstall -g jfixer && npm install -g .",
+    "install:linux": "sudo npm uninstall -g jfixer && sudo npm install -g .",
+    "install:mac": "sudo npm uninstall -g jfixer && sudo npm install -g ."
   },
   "bin": {
-    "jhipster-fix": "./dist/jhipster-fix.js"
+    "jfixer": "./dist/jfixer.js"
   },
   "repository": {
     "type": "git",
