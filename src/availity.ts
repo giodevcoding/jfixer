@@ -58,6 +58,7 @@ function getInitialAvailityReplacements(data: string): string {
       .replaceAll(/AvGroup/g, "FormGroup")
       .replaceAll(/AvInput/g, "Input")
       .replaceAll(/AvField/g, "Field")
+      .replaceAll(/onValidSubmit/g, "onSubmit")
   );
 }
 
