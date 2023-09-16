@@ -1,5 +1,6 @@
 import * as fs from "node:fs/promises";
 import { jfixerlog } from "./util";
+import { OldFieldWithValidator, OldValidator, OldValidatorSchema } from "./types";
 
 /**
  * Updates availity-reactstrap-validation to @availity/form and the imported components.
@@ -34,8 +35,9 @@ export function updateAvailityPackages(
       const withInitialValues = insertAvailityInitialValues(initialReplacments);
       const withUpdatedSubmit = updateAvailitySubmit(withInitialValues);
       const withFixedFormGroups = fixAvailityFormGroups(withUpdatedSubmit);
+      const withSchemaValidation = addSchemaValidation(withFixedFormGroups);
 
-      fs.writeFile(path, withFixedFormGroups).then(() => {
+      fs.writeFile(path, withSchemaValidation).then(() => {
         jfixerlog(
           "Updated availity-reactstrap-validation to @availity/form in:",
           path,
@@ -48,18 +50,17 @@ export function updateAvailityPackages(
 }
 
 function getInitialAvailityReplacements(data: string): string {
-  return (
-    data
-      .replaceAll(/availity-reactstrap-validation/g, "@availity/form")
-      .replaceAll(/AvFeedback,\s*(?=.*availity)/g, "")
-      .replaceAll(/<AvFeedback/g, '<span className="invalid-feedback"')
-      .replaceAll(/<\/AvFeedback.*>/g, "</span>")
-      .replaceAll(/AvForm/g, "Form")
-      .replaceAll(/AvGroup/g, "FormGroup")
-      .replaceAll(/AvInput/g, "Input")
-      .replaceAll(/AvField/g, "Field")
-      .replaceAll(/onValidSubmit/g, "onSubmit")
-  );
+  return data
+    .replaceAll(/availity-reactstrap-validation;*/g, "@availity/form")
+    .replaceAll(/AvFeedback,\s*(?=.*availity)/g, "")
+    .replaceAll(/<AvFeedback/g, '<span className="invalid-feedback"')
+    .replaceAll(/<\/AvFeedback.*>/g, "</span>")
+    .replaceAll(/AvForm/g, "Form")
+    .replaceAll(/AvGroup/g, "FormGroup")
+    .replaceAll(/AvInput/g, "Input")
+    .replaceAll(/AvField/g, "Field")
+    .replaceAll(/onValidSubmit/g, "onSubmit")
+    .replace(/import(?![\s\S]*import)/, "import * as yup from 'yup';\nimport");
 }
 
 function insertAvailityInitialValues(data: string): string {
@@ -109,6 +110,92 @@ function fixAvailityFormGroups(data: string): string {
   });
 
   return newData;
+}
+
+function addSchemaValidation(data: string): string {
+  // TODO: Read existing validation and create new yup validation schema,
+  // then remove old validation. Only place yup validation will not suffice
+  // is for matching passwords, I believe
+  
+  /*
+  if (!data.includes("validate={{")) return data;
+
+  const nameRegex =
+    /(?<=name=").*(?="[\s\S]*validate=\{\s*(?:[\s\S]*?)\}\s*\}})/g;
+  const typeRegex =
+    /(?<=type=").*(?="[\s\S]*validate=\{\s*(?:[\s\S]*?)\}\s*\}})/g;
+  const validatorRegex = /(?<=validate=\{)\s*(?:[^()]*?)\}\s*\}(?=})/g;
+  const names = data.match(nameRegex) ?? [];
+  const types = data.match(typeRegex) ?? [];
+  const validators = data
+    .match(validatorRegex)
+    ?.map<OldValidatorSchema | null>((match) => {
+      if (match.includes("//")) {
+        return null;
+      }
+      return JSON.parse(match.replaceAll(/(?=\b[a-zA-Z]*\b:)|'/g, '"'));
+    });
+
+  const allValidatorFields: OldFieldWithValidator[] = [];
+  validators?.forEach((validator, index) => {
+    if (validator != null) {
+      allValidatorFields.push({
+        name: names?.[index],
+        type: types?.[index] as OldFieldWithValidator["type"],
+        validator,
+      });
+    }
+  });
+
+  const newData = data
+    .replace(
+      /(?<=const initialValues = {[\s\S]*)}/m,
+      getYupValidationSchema(allValidatorFields),
+    )
+    .replaceAll(/(?<=<Form.*)>/g, " validationSchema={validationSchema}>");
+
+    */
+  return data;
+}
+
+function getYupValidationSchema(fields: OldFieldWithValidator[]) {
+  let schema = "}\n\nconst validationSchema = yup.object({";
+  fields.forEach((field) => {
+    schema = schema.concat("\n  ", createYupValidaton(field), ",");
+  });
+  schema = schema.concat("\n});\n");
+  return schema;
+}
+
+function createYupValidaton({
+  name,
+  type,
+  validator,
+}: OldFieldWithValidator): string {
+
+  let validation = `${name}: ${getYupType(type, validator)}`;
+
+  return validation;
+}
+
+function getYupType(type: OldFieldWithValidator["type"], validator: OldValidatorSchema) {
+  if (Object.keys(validator).includes("number")) {
+    return "yup.number()"
+  }
+
+  if (type === "text" || type === "textarea" || type === "string" || type === "password") {
+    return 'yup.string()'
+  }
+
+  if ( type === "email" ) {
+    return "yup.string().email()"
+  }
+
+  if (type === "datetime-local") {
+    return "yup.date()"
+  }
+
+  return "yup.string()"
 }
 
 function getAvailityFieldNames(data: string): string[] {

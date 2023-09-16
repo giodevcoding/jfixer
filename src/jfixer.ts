@@ -77,6 +77,7 @@ function removePackages(packageJson: PackageJSON) {
 function installPackages(packageJson: PackageJSON) {
   const allNewPackages: NPMPackage[] = [
     { name: "formik" },
+    { name: "yup" },
     { name: "@availity/form", version: "1.7.4" },
   ];
 
